@@ -1,4 +1,4 @@
-# micro-fetch
+# micro-ftch
 
 Wraps nodejs built-in modules and browser fetch into one function
 
@@ -6,10 +6,10 @@ Wraps nodejs built-in modules and browser fetch into one function
 
 Can be used in browser and in node.js.
 
-> npm install micro-fetch
+> npm install micro-ftch
 
 ```js
-const fetch = require('micro-fetch');
+const fetch = require('micro-ftch');
 fetch('https://google.com').then(...)
 ```
 
