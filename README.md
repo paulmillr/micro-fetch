@@ -4,7 +4,7 @@ Wraps nodejs built-in modules and browser fetch into one function
 
 ## Usage
 
-Can be used in browser and in nodejs.
+Can be used in browser and in node.js.
 
 > npm install micro-fetch
 
