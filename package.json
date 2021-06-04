@@ -1,6 +1,6 @@
 {
   "name": "micro-ftch",
-  "version": "0.1.1",
+  "version": "0.2.1",
   "description": "Wraps nodejs built-in modules and browser fetch into one function.",
   "main": "index.js",
   "files": [
