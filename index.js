@@ -2,13 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const DEFAULT_OPT = Object.freeze({
     redirect: true,
-    status: 200,
+    expectStatusCode: 200,
     headers: {},
     full: false,
-    keepalive: true,
+    keepAlive: true,
     cors: false,
     referrer: false,
-    _redirectCnt: 0,
+    _redirectCount: 0,
 });
 function detectType(b, type) {
     if (!type || type === 'text' || type === 'json') {
@@ -38,6 +38,7 @@ function fetchNode(url, options = DEFAULT_OPT) {
     const http = require('http');
     const https = require('https');
     const zlib = require('zlib');
+    const { promisify } = require('util');
     const { resolve: urlResolve } = require('url');
     const agentOpt = { keepAlive: true, keepAliveMsecs: 30 * 1000, maxFreeSockets: 1024 };
     if (!_httpAgent)
@@ -49,7 +50,7 @@ function fetchNode(url, options = DEFAULT_OPT) {
         method: options.method || 'GET',
         headers: { 'Accept-Encoding': 'gzip, deflate, br' },
     };
-    if (options.keepalive)
+    if (options.keepAlive)
         opts.agent = isSecure ? _httpsAgent : _httpAgent;
     if (options.type === 'json')
         opts.headers['Content-Type'] = 'application/json';
@@ -62,12 +63,12 @@ function fetchNode(url, options = DEFAULT_OPT) {
     const handleRes = async (res) => {
         const status = res.statusCode;
         if (options.redirect && 300 <= status && status < 400 && res.headers['location']) {
-            if (options._redirectCnt == 10)
+            if (options._redirectCount == 10)
                 throw new Error('Request failed. Too much redirects.');
-            options._redirectCnt += 1;
+            options._redirectCount += 1;
             return await fetchNode(urlResolve(url, res.headers['location']), options);
         }
-        if (options.status && status !== options.status) {
+        if (options.expectStatusCode && status !== options.expectStatusCode) {
             res.resume();
             throw new Error(`Request Failed. Status Code: ${status}`);
         }
@@ -77,9 +78,9 @@ function fetchNode(url, options = DEFAULT_OPT) {
         let bytes = Buffer.concat(buf);
         const encoding = res.headers['content-encoding'];
         if (encoding === 'br')
-            bytes = zlib.brotliDecompressSync(bytes);
+            bytes = await promisify(zlib.brotliDecompress)(bytes);
         if (encoding === 'gzip' || encoding === 'deflate')
-            bytes = zlib.unzipSync(bytes);
+            bytes = await promisify(zlib.unzip)(bytes);
         const body = detectType(bytes, options.type);
         if (options.full)
             return { headers: res.headers, status, body };
@@ -97,7 +98,7 @@ function fetchNode(url, options = DEFAULT_OPT) {
                 }
             })();
         });
-        if (options.keepalive)
+        if (options.keepAlive)
             req.setNoDelay(true);
         if (opts.body)
             req.write(opts.body);
@@ -129,7 +130,7 @@ async function fetchBrowser(url, options) {
         opts.body = options.type === 'json' ? JSON.stringify(options.data) : options.data;
     }
     const res = await fetch(url, opts);
-    if (options.status && res.status !== options.status)
+    if (options.expectStatusCode && res.status !== options.expectStatusCode)
         throw new Error(`Request failed. Status code: ${res.status}`);
     const body = detectType(new Uint8Array(await res.arrayBuffer()), options.type);
     if (options.full)

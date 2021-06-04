@@ -2,25 +2,25 @@ type FETCH_OPT = {
   method?: string;
   type?: 'text' | 'json' | 'bytes'; // Response encoding (auto-detect if empty)
   redirect: boolean; // Follow redirects
-  status?: number | false; // Expect this status code
+  expectStatusCode?: number | false; // Expect this status code
   headers: Record<string, string>;
   data?: object; // POST/PUT/DELETE request data
   full: boolean; // Return full request {headers, status, body}
-  keepalive: boolean; // Enable keep-alive (node only)
+  keepAlive: boolean; // Enable keep-alive (node only)
   cors: boolean; // Allow CORS safe-listed headers (browser-only)
   referrer: boolean; // Send referrer (browser-only)
-  _redirectCnt: number;
+  _redirectCount: number;
 };
 
 const DEFAULT_OPT: FETCH_OPT = Object.freeze({
   redirect: true,
-  status: 200,
+  expectStatusCode: 200,
   headers: {},
   full: false,
-  keepalive: true,
+  keepAlive: true,
   cors: false,
   referrer: false,
-  _redirectCnt: 0,
+  _redirectCount: 0,
 });
 
 function detectType(b: Uint8Array, type?: 'text' | 'json' | 'bytes') {
@@ -47,6 +47,7 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
   const http = require('http');
   const https = require('https');
   const zlib = require('zlib');
+  const { promisify } = require('util');
   const { resolve: urlResolve } = require('url');
   const agentOpt = { keepAlive: true, keepAliveMsecs: 30 * 1000, maxFreeSockets: 1024 };
   if (!_httpAgent) _httpAgent = new http.Agent(agentOpt);
@@ -56,7 +57,7 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
     method: options.method || 'GET',
     headers: { 'Accept-Encoding': 'gzip, deflate, br' }, // Same as browsers
   };
-  if (options.keepalive) opts.agent = isSecure ? _httpsAgent : _httpAgent;
+  if (options.keepAlive) opts.agent = isSecure ? _httpsAgent : _httpAgent;
   if (options.type === 'json') opts.headers['Content-Type'] = 'application/json';
   if (options.data) {
     if (!options.method) opts.method = 'POST';
@@ -66,11 +67,11 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
   const handleRes = async (res: any) => {
     const status = res.statusCode;
     if (options.redirect && 300 <= status && status < 400 && res.headers['location']) {
-      if (options._redirectCnt == 10) throw new Error('Request failed. Too much redirects.');
-      options._redirectCnt += 1;
+      if (options._redirectCount == 10) throw new Error('Request failed. Too much redirects.');
+      options._redirectCount += 1;
       return await fetchNode(urlResolve(url, res.headers['location']), options);
     }
-    if (options.status && status !== options.status) {
+    if (options.expectStatusCode && status !== options.expectStatusCode) {
       res.resume(); // Consume response data to free up memory
       throw new Error(`Request Failed. Status Code: ${status}`);
     }
@@ -78,8 +79,8 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
     for await (const chunk of res) buf.push(chunk);
     let bytes = Buffer.concat(buf);
     const encoding = res.headers['content-encoding'];
-    if (encoding === 'br') bytes = zlib.brotliDecompressSync(bytes);
-    if (encoding === 'gzip' || encoding === 'deflate') bytes = zlib.unzipSync(bytes);
+    if (encoding === 'br') bytes = await promisify(zlib.brotliDecompress)(bytes);
+    if (encoding === 'gzip' || encoding === 'deflate') bytes = await promisify(zlib.unzip)(bytes);
     const body = detectType(bytes, options.type);
     if (options.full) return { headers: res.headers, status, body };
     return body;
@@ -97,7 +98,7 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
       })();
     });
     // Disable Nagle's algorithm
-    if (options.keepalive) req.setNoDelay(true);
+    if (options.keepAlive) req.setNoDelay(true);
     if (opts.body) req.write(opts.body);
     req.end();
   });
@@ -130,7 +131,7 @@ async function fetchBrowser(url: string, options?: FETCH_OPT): Promise<any> {
     opts.body = options.type === 'json' ? JSON.stringify(options.data) : options.data;
   }
   const res = await fetch(url, opts);
-  if (options.status && res.status !== options.status)
+  if (options.expectStatusCode && res.status !== options.expectStatusCode)
     throw new Error(`Request failed. Status code: ${res.status}`);
   const body = detectType(new Uint8Array(await res.arrayBuffer()), options.type);
   if (options.full)
