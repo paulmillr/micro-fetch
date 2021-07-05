@@ -111,9 +111,24 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
     return body;
   };
   return new Promise((resolve, reject) => {
+    const handleError = async (err: any) => {
+      if (err && err.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
+        try {
+          await fetchNode(url, { ...options, sslAllowSelfSigned: true, sslPinnedCertificates: [] });
+        } catch (e) {
+          if (e && e.fingerprint256) {
+            err = new InvalidCertError(
+              `Self-signed SSL certificate: ${e.fingerprint256}`,
+              e.fingerprint256
+            );
+          }
+        }
+      }
+      reject(err);
+    };
     const req = (isSecure ? https : http).request(url, opts, (res: any) => {
       // Should be set immediately since error can happen on connect (before promise)
-      res.on('error', reject);
+      res.on('error', handleError);
       (async () => {
         try {
           resolve(await handleRes(res));
@@ -122,7 +137,7 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
         }
       })();
     });
-    req.on('error', reject);
+    req.on('error', handleError);
     // checkServerIdentity is not emitted on self-signed certificates
     const pinned = options.sslPinnedCertificates?.map((i) => compactFP(i));
     const mfetchSecureConnect = (socket: TLSSocket) => {

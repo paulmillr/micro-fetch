@@ -207,6 +207,23 @@ exports.node = {
     } catch (e) {
       err = e;
     }
+    eq(
+      '' + err,
+      'Error: Invalid SSL certificate: da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195 Expected: 35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'
+    );
+    eq(err.fingerprint256, 'da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195');
+  },
+  'SSL (get error, self-signed)': async (fetch) => {
+    let err;
+    try {
+      await fetch('https://localhost:28002/');
+    } catch (e) {
+      err = e;
+    }
+    eq(
+      '' + err,
+      'Error: Self-signed SSL certificate: da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'
+    );
     eq(err.fingerprint256, 'da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195');
   },
 };
