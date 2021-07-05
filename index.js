@@ -9,7 +9,7 @@ const DEFAULT_OPT = Object.freeze({
     keepAlive: true,
     cors: false,
     referrer: false,
-    sslSelfSigned: false,
+    sslAllowSelfSigned: false,
     _redirectCount: 0,
 });
 class InvalidCertError extends Error {
@@ -64,7 +64,7 @@ function fetchNode(url, options = DEFAULT_OPT) {
         };
         const agentKey = [
             isSecure,
-            isSecure && options.sslPinCert?.map((i) => compactFP(i)).sort(),
+            isSecure && options.sslPinnedCertificates?.map((i) => compactFP(i)).sort(),
         ].join();
         opts.agent =
             agents[agentKey] || (agents[agentKey] = new (isSecure ? https : http).Agent(agentOpt));
@@ -77,7 +77,7 @@ function fetchNode(url, options = DEFAULT_OPT) {
         opts.body = options.type === 'json' ? JSON.stringify(options.data) : options.data;
     }
     opts.headers = { ...opts.headers, ...options.headers };
-    if (options.sslSelfSigned)
+    if (options.sslAllowSelfSigned)
         opts.rejectUnauthorized = false;
     const handleRes = async (res) => {
         const status = res.statusCode;
@@ -106,8 +106,21 @@ function fetchNode(url, options = DEFAULT_OPT) {
         return body;
     };
     return new Promise((resolve, reject) => {
+        const handleError = async (err) => {
+            if (err && err.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
+                try {
+                    await fetchNode(url, { ...options, sslAllowSelfSigned: true, sslPinnedCertificates: [] });
+                }
+                catch (e) {
+                    if (e && e.fingerprint256) {
+                        err = new InvalidCertError(`Self-signed SSL certificate: ${e.fingerprint256}`, e.fingerprint256);
+                    }
+                }
+            }
+            reject(err);
+        };
         const req = (isSecure ? https : http).request(url, opts, (res) => {
-            res.on('error', reject);
+            res.on('error', handleError);
             (async () => {
                 try {
                     resolve(await handleRes(res));
@@ -117,8 +130,8 @@ function fetchNode(url, options = DEFAULT_OPT) {
                 }
             })();
         });
-        req.on('error', reject);
-        const pinned = options.sslPinCert?.map((i) => compactFP(i));
+        req.on('error', handleError);
+        const pinned = options.sslPinnedCertificates?.map((i) => compactFP(i));
         const mfetchSecureConnect = (socket) => {
             const fp256 = compactFP(socket.getPeerCertificate()?.fingerprint256 || '');
             if (!fp256 && socket.isSessionReused())
@@ -128,7 +141,7 @@ function fetchNode(url, options = DEFAULT_OPT) {
             req.emit('error', new InvalidCertError(`Invalid SSL certificate: ${fp256} Expected: ${pinned}`, fp256));
             return req.abort();
         };
-        if (options.sslPinCert) {
+        if (options.sslPinnedCertificates) {
             req.on('socket', (socket) => {
                 const hasListeners = socket
                     .listeners('secureConnect')

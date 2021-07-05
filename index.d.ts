@@ -9,8 +9,8 @@ export declare type FETCH_OPT = {
     keepAlive: boolean;
     cors: boolean;
     referrer: boolean;
-    sslSelfSigned: boolean;
-    sslPinCert?: string[];
+    sslAllowSelfSigned: boolean;
+    sslPinnedCertificates?: string[];
     _redirectCount: number;
 };
 export declare class InvalidCertError extends Error {

@@ -18,8 +18,8 @@ const fetch = require('../index').default;
   console.log(`HTTPS ${msg} in ${Date.now() - ts} ms.`);
   // To make sure that keepalive still works with pinning
   const PIN_OPT = {
-    sslSelfSigned: true,
-    sslPinCert: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
+    sslAllowSelfSigned: true,
+    sslCertificateWhitelist: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
   };
   ts = Date.now();
   for (let i = 0; i < NUM; i++)
