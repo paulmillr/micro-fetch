@@ -29,6 +29,12 @@ const DEFAULT_OPT: FETCH_OPT = Object.freeze({
   _redirectCount: 0,
 });
 
+export class InvalidCertError extends Error {
+  constructor(msg: string, public readonly fingerprint256: string) {
+    super(msg);
+  }
+}
+
 function detectType(b: Uint8Array, type?: 'text' | 'json' | 'bytes') {
   if (!type || type === 'text' || type === 'json') {
     try {
@@ -124,7 +130,10 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
       // Socket re-used, but previously verified since there is separate agent per pinning
       if (!fp256 && socket.isSessionReused()) return;
       if (pinned!.includes(fp256)) return;
-      req.emit('error', new Error(`Invalid SSL certificate: ${fp256} Expected: ${pinned}`));
+      req.emit(
+        'error',
+        new InvalidCertError(`Invalid SSL certificate: ${fp256} Expected: ${pinned}`, fp256)
+      );
       return req.abort();
     };
     if (options.sslPinCert) {

@@ -13,4 +13,8 @@ export declare type FETCH_OPT = {
     sslPinCert?: string[];
     _redirectCount: number;
 };
+export declare class InvalidCertError extends Error {
+    readonly fingerprint256: string;
+    constructor(msg: string, fingerprint256: string);
+}
 export default function fetchUrl(url: string, options?: FETCH_OPT): Promise<any>;

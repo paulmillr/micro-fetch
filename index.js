@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.InvalidCertError = void 0;
 const DEFAULT_OPT = Object.freeze({
     redirect: true,
     expectStatusCode: 200,
@@ -11,6 +12,13 @@ const DEFAULT_OPT = Object.freeze({
     sslSelfSigned: false,
     _redirectCount: 0,
 });
+class InvalidCertError extends Error {
+    constructor(msg, fingerprint256) {
+        super(msg);
+        this.fingerprint256 = fingerprint256;
+    }
+}
+exports.InvalidCertError = InvalidCertError;
 function detectType(b, type) {
     if (!type || type === 'text' || type === 'json') {
         try {
@@ -117,7 +125,7 @@ function fetchNode(url, options = DEFAULT_OPT) {
                 return;
             if (pinned.includes(fp256))
                 return;
-            req.emit('error', new Error(`Invalid SSL certificate: ${fp256} Expected: ${pinned}`));
+            req.emit('error', new InvalidCertError(`Invalid SSL certificate: ${fp256} Expected: ${pinned}`, fp256));
             return req.abort();
         };
         if (options.sslPinCert) {

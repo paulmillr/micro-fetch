@@ -197,5 +197,17 @@ exports.node = {
         sslPinCert: ['da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'],
       })
     ),
+  'SSL (get error)': async (fetch) => {
+    let err;
+    try {
+      await fetch('https://localhost:28002/', {
+        sslSelfSigned: true,
+        sslPinCert: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
+      });
+    } catch (e) {
+      err = e;
+    }
+    eq(err.fingerprint256, 'da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195');
+  },
 };
 exports.browser = {};
