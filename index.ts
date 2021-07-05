@@ -1,4 +1,7 @@
-type FETCH_OPT = {
+import { Agent } from 'http';
+import { TLSSocket } from 'tls';
+
+export type FETCH_OPT = {
   method?: string;
   type?: 'text' | 'json' | 'bytes'; // Response encoding (auto-detect if empty)
   redirect: boolean; // Follow redirects
@@ -9,6 +12,8 @@ type FETCH_OPT = {
   keepAlive: boolean; // Enable keep-alive (node only)
   cors: boolean; // Allow CORS safe-listed headers (browser-only)
   referrer: boolean; // Send referrer (browser-only)
+  sslSelfSigned: boolean; // Allow self-signed ssl certs (node only)
+  sslPinCert?: string[]; // Verify fingerprint of certificate (node only)
   _redirectCount: number;
 };
 
@@ -20,6 +25,7 @@ const DEFAULT_OPT: FETCH_OPT = Object.freeze({
   keepAlive: true,
   cors: false,
   referrer: false,
+  sslSelfSigned: false,
   _redirectCount: 0,
 });
 
@@ -41,7 +47,7 @@ function detectType(b: Uint8Array, type?: 'text' | 'json' | 'bytes') {
   return b;
 }
 
-let _httpAgent: any, _httpsAgent: any;
+let agents: Record<string, Agent> = {};
 function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> {
   options = { ...DEFAULT_OPT, ...options };
   const http = require('http');
@@ -49,21 +55,34 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
   const zlib = require('zlib');
   const { promisify } = require('util');
   const { resolve: urlResolve } = require('url');
-  const agentOpt = { keepAlive: true, keepAliveMsecs: 30 * 1000, maxFreeSockets: 1024 };
-  if (!_httpAgent) _httpAgent = new http.Agent(agentOpt);
-  if (!_httpsAgent) _httpsAgent = new https.Agent(agentOpt);
   const isSecure = !!/^https/.test(url);
   let opts: any = {
     method: options.method || 'GET',
     headers: { 'Accept-Encoding': 'gzip, deflate, br' }, // Same as browsers
   };
-  if (options.keepAlive) opts.agent = isSecure ? _httpsAgent : _httpAgent;
+  const compactFP = (s: string) => s.replace(/:| /g, '').toLowerCase();
+  if (options.keepAlive) {
+    const agentOpt = {
+      keepAlive: true,
+      keepAliveMsecs: 30 * 1000,
+      maxFreeSockets: 1024,
+      maxCachedSessions: 1024,
+    };
+    // sslSelfSinged is already part of key inside agent
+    const agentKey = [
+      isSecure,
+      isSecure && options.sslPinCert?.map((i) => compactFP(i)).sort(),
+    ].join();
+    opts.agent =
+      agents[agentKey] || (agents[agentKey] = new (isSecure ? https : http).Agent(agentOpt));
+  }
   if (options.type === 'json') opts.headers['Content-Type'] = 'application/json';
   if (options.data) {
     if (!options.method) opts.method = 'POST';
     opts.body = options.type === 'json' ? JSON.stringify(options.data) : options.data;
   }
   opts.headers = { ...opts.headers, ...options.headers };
+  if (options.sslSelfSigned) opts.rejectUnauthorized = false;
   const handleRes = async (res: any) => {
     const status = res.statusCode;
     if (options.redirect && 300 <= status && status < 400 && res.headers['location']) {
@@ -97,6 +116,28 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
         }
       })();
     });
+    req.on('error', reject);
+    // checkServerIdentity is not emitted on self-signed certificates
+    const pinned = options.sslPinCert?.map((i) => compactFP(i));
+    const mfetchSecureConnect = (socket: TLSSocket) => {
+      const fp256 = compactFP(socket.getPeerCertificate()?.fingerprint256 || '');
+      // Socket re-used, but previously verified since there is separate agent per pinning
+      if (!fp256 && socket.isSessionReused()) return;
+      if (pinned!.includes(fp256)) return;
+      req.emit('error', new Error(`Invalid SSL certificate: ${fp256} Expected: ${pinned}`));
+      return req.abort();
+    };
+    if (options.sslPinCert) {
+      req.on('socket', (socket: TLSSocket) => {
+        // Avoid memory leak if socket is reused and already has listener
+        const hasListeners = socket
+          .listeners('secureConnect')
+          .map((i) => (i.name || '').replace('bound ', ''))
+          .includes('mfetchSecureConnect');
+        if (hasListeners) return;
+        socket.on('secureConnect', mfetchSecureConnect.bind(null, socket));
+      });
+    }
     // Disable Nagle's algorithm
     if (options.keepAlive) req.setNoDelay(true);
     if (opts.body) req.write(opts.body);
@@ -118,6 +159,14 @@ async function fetchBrowser(url: string, options?: FETCH_OPT): Promise<any> {
   options = { ...DEFAULT_OPT, ...options };
   const headers = new Headers();
   if (options.type === 'json') headers.set('Content-Type', 'application/json');
+  let parsed = new URL(url);
+  if (parsed.username) {
+    const auth = btoa(`${parsed.username}:${parsed.password}`);
+    headers.set('Authorization', `Basic ${auth}`);
+    parsed.username = '';
+    parsed.password = '';
+  }
+  url = '' + parsed;
   for (let k in options.headers) {
     const name = k.toLowerCase();
     if (SAFE_HEADERS.has(name) || (options.cors && !FORBIDDEN_HEADERS.has(name)))

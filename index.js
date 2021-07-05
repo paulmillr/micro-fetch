@@ -8,6 +8,7 @@ const DEFAULT_OPT = Object.freeze({
     keepAlive: true,
     cors: false,
     referrer: false,
+    sslSelfSigned: false,
     _redirectCount: 0,
 });
 function detectType(b, type) {
@@ -32,7 +33,7 @@ function detectType(b, type) {
     }
     return b;
 }
-let _httpAgent, _httpsAgent;
+let agents = {};
 function fetchNode(url, options = DEFAULT_OPT) {
     options = { ...DEFAULT_OPT, ...options };
     const http = require('http');
@@ -40,18 +41,26 @@ function fetchNode(url, options = DEFAULT_OPT) {
     const zlib = require('zlib');
     const { promisify } = require('util');
     const { resolve: urlResolve } = require('url');
-    const agentOpt = { keepAlive: true, keepAliveMsecs: 30 * 1000, maxFreeSockets: 1024 };
-    if (!_httpAgent)
-        _httpAgent = new http.Agent(agentOpt);
-    if (!_httpsAgent)
-        _httpsAgent = new https.Agent(agentOpt);
     const isSecure = !!/^https/.test(url);
     let opts = {
         method: options.method || 'GET',
         headers: { 'Accept-Encoding': 'gzip, deflate, br' },
     };
-    if (options.keepAlive)
-        opts.agent = isSecure ? _httpsAgent : _httpAgent;
+    const compactFP = (s) => s.replace(/:| /g, '').toLowerCase();
+    if (options.keepAlive) {
+        const agentOpt = {
+            keepAlive: true,
+            keepAliveMsecs: 30 * 1000,
+            maxFreeSockets: 1024,
+            maxCachedSessions: 1024,
+        };
+        const agentKey = [
+            isSecure,
+            isSecure && options.sslPinCert?.map((i) => compactFP(i)).sort(),
+        ].join();
+        opts.agent =
+            agents[agentKey] || (agents[agentKey] = new (isSecure ? https : http).Agent(agentOpt));
+    }
     if (options.type === 'json')
         opts.headers['Content-Type'] = 'application/json';
     if (options.data) {
@@ -60,6 +69,8 @@ function fetchNode(url, options = DEFAULT_OPT) {
         opts.body = options.type === 'json' ? JSON.stringify(options.data) : options.data;
     }
     opts.headers = { ...opts.headers, ...options.headers };
+    if (options.sslSelfSigned)
+        opts.rejectUnauthorized = false;
     const handleRes = async (res) => {
         const status = res.statusCode;
         if (options.redirect && 300 <= status && status < 400 && res.headers['location']) {
@@ -98,6 +109,28 @@ function fetchNode(url, options = DEFAULT_OPT) {
                 }
             })();
         });
+        req.on('error', reject);
+        const pinned = options.sslPinCert?.map((i) => compactFP(i));
+        const mfetchSecureConnect = (socket) => {
+            const fp256 = compactFP(socket.getPeerCertificate()?.fingerprint256 || '');
+            if (!fp256 && socket.isSessionReused())
+                return;
+            if (pinned.includes(fp256))
+                return;
+            req.emit('error', new Error(`Invalid SSL certificate: ${fp256} Expected: ${pinned}`));
+            return req.abort();
+        };
+        if (options.sslPinCert) {
+            req.on('socket', (socket) => {
+                const hasListeners = socket
+                    .listeners('secureConnect')
+                    .map((i) => (i.name || '').replace('bound ', ''))
+                    .includes('mfetchSecureConnect');
+                if (hasListeners)
+                    return;
+                socket.on('secureConnect', mfetchSecureConnect.bind(null, socket));
+            });
+        }
         if (options.keepAlive)
             req.setNoDelay(true);
         if (opts.body)
@@ -114,6 +147,14 @@ async function fetchBrowser(url, options) {
     const headers = new Headers();
     if (options.type === 'json')
         headers.set('Content-Type', 'application/json');
+    let parsed = new URL(url);
+    if (parsed.username) {
+        const auth = btoa(`${parsed.username}:${parsed.password}`);
+        headers.set('Authorization', `Basic ${auth}`);
+        parsed.username = '';
+        parsed.password = '';
+    }
+    url = '' + parsed;
     for (let k in options.headers) {
         const name = k.toLowerCase();
         if (SAFE_HEADERS.has(name) || (options.cors && !FORBIDDEN_HEADERS.has(name)))
