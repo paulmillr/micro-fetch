@@ -12,8 +12,8 @@ export type FETCH_OPT = {
   keepAlive: boolean; // Enable keep-alive (node only)
   cors: boolean; // Allow CORS safe-listed headers (browser-only)
   referrer: boolean; // Send referrer (browser-only)
-  sslSelfSigned: boolean; // Allow self-signed ssl certs (node only)
-  sslPinCert?: string[]; // Verify fingerprint of certificate (node only)
+  sslAllowSelfSigned: boolean; // Allow self-signed ssl certs (node only)
+  sslPinnedCertificates?: string[]; // Verify fingerprint of certificate (node only)
   _redirectCount: number;
 };
 
@@ -25,7 +25,7 @@ const DEFAULT_OPT: FETCH_OPT = Object.freeze({
   keepAlive: true,
   cors: false,
   referrer: false,
-  sslSelfSigned: false,
+  sslAllowSelfSigned: false,
   _redirectCount: 0,
 });
 
@@ -77,7 +77,7 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
     // sslSelfSinged is already part of key inside agent
     const agentKey = [
       isSecure,
-      isSecure && options.sslPinCert?.map((i) => compactFP(i)).sort(),
+      isSecure && options.sslPinnedCertificates?.map((i) => compactFP(i)).sort(),
     ].join();
     opts.agent =
       agents[agentKey] || (agents[agentKey] = new (isSecure ? https : http).Agent(agentOpt));
@@ -88,7 +88,7 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
     opts.body = options.type === 'json' ? JSON.stringify(options.data) : options.data;
   }
   opts.headers = { ...opts.headers, ...options.headers };
-  if (options.sslSelfSigned) opts.rejectUnauthorized = false;
+  if (options.sslAllowSelfSigned) opts.rejectUnauthorized = false;
   const handleRes = async (res: any) => {
     const status = res.statusCode;
     if (options.redirect && 300 <= status && status < 400 && res.headers['location']) {
@@ -124,7 +124,7 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
     });
     req.on('error', reject);
     // checkServerIdentity is not emitted on self-signed certificates
-    const pinned = options.sslPinCert?.map((i) => compactFP(i));
+    const pinned = options.sslPinnedCertificates?.map((i) => compactFP(i));
     const mfetchSecureConnect = (socket: TLSSocket) => {
       const fp256 = compactFP(socket.getPeerCertificate()?.fingerprint256 || '');
       // Socket re-used, but previously verified since there is separate agent per pinning
@@ -136,7 +136,7 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
       );
       return req.abort();
     };
-    if (options.sslPinCert) {
+    if (options.sslPinnedCertificates) {
       req.on('socket', (socket: TLSSocket) => {
         // Avoid memory leak if socket is reused and already has listener
         const hasListeners = socket

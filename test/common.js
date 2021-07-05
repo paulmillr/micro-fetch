@@ -131,14 +131,14 @@ exports.tests = {
 exports.node = {
   'SSL (fails on self-signed)': (fetch) => throws(() => fetch('https://localhost:28001/')),
   'SSL (allow self-signed)': async (fetch) => {
-    const res = await fetch('https://localhost:28001/', { sslSelfSigned: true });
+    const res = await fetch('https://localhost:28001/', { sslAllowSelfSigned: true });
     eq(res, { test: 'passed' });
   },
   'SSL (allow self-signed, pinning)': async (fetch) => {
     for (let i = 0; i < 50; i++) {
       const res = await fetch('https://localhost:28001/', {
-        sslSelfSigned: true,
-        sslPinCert: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
+        sslAllowSelfSigned: true,
+        sslPinnedCertificates: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
       });
       eq(res, { test: 'passed' });
     }
@@ -146,15 +146,15 @@ exports.node = {
   'SSL (allow self-signed, pinning, fails)': (fetch) =>
     throws(() =>
       fetch('https://localhost:28002/', {
-        sslSelfSigned: true,
-        sslPinCert: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
+        sslAllowSelfSigned: true,
+        sslPinnedCertificates: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
       })
     ),
   'SSL (allow self-signed, pinning2)': async (fetch) => {
     for (let i = 0; i < 50; i++) {
       const res = await fetch('https://localhost:28002/', {
-        sslSelfSigned: true,
-        sslPinCert: ['da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'],
+        sslAllowSelfSigned: true,
+        sslPinnedCertificates: ['da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'],
       });
       eq(res, { test: 'passed' });
     }
@@ -162,8 +162,8 @@ exports.node = {
   'SSL (allow self-signed, pinning, re-use)': async (fetch) => {
     for (let i = 0; i < 50; i++) {
       const res = await fetch('https://localhost:28002/', {
-        sslSelfSigned: true,
-        sslPinCert: [
+        sslAllowSelfSigned: true,
+        sslPinnedCertificates: [
           'DA 58 92 ED B1 95 8C 16 52 FA 7F 6D 19 DA 65 03 12 A3 CC E9 06 AC 52 9C F8 83 05 09 F1 C4 B1 95',
         ],
       });
@@ -173,7 +173,7 @@ exports.node = {
   'SSL (pinning, httpbin)': async (fetch) => {
     for (let i = 0; i < 5; i++) {
       const res = await fetch('https://httpbin.org/robots.txt', {
-        sslPinCert: ['944564e1b2cf887e3cc6ae0b527217d723c8b36c9b0a68a517735b730f8db4f3'],
+        sslPinnedCertificates: ['944564e1b2cf887e3cc6ae0b527217d723c8b36c9b0a68a517735b730f8db4f3'],
       });
       eq(res, 'User-agent: *\nDisallow: /deny\n');
     }
@@ -181,28 +181,28 @@ exports.node = {
   'SSL (pinning, httpbin, fails)': (fetch) =>
     throws(() =>
       fetch('https://httpbin.org/robots.txt', {
-        sslPinCert: ['da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'],
+        sslPinnedCertificates: ['da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'],
       })
     ),
   // By some reasons only redirects triggers re-use of tls session
   'SSL (redirects, pinning, re-use)': async (fetch) => {
     const res = await fetch('https://httpbingo.org/absolute-redirect/10', {
-      sslPinCert: ['adb918e1a20b97c19fe072da4436ddaa1bbd1d2c8d9bcb85b4dd9cf954d48311'],
+      sslPinnedCertificates: ['adb918e1a20b97c19fe072da4436ddaa1bbd1d2c8d9bcb85b4dd9cf954d48311'],
     });
     eq(res.url, 'https://httpbingo.org/get');
   },
   'SSL (redirects, pinning, re-use, fail)': (fetch) =>
     throws(() =>
       fetch('https://httpbingo.org/absolute-redirect/10', {
-        sslPinCert: ['da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'],
+        sslPinnedCertificates: ['da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'],
       })
     ),
   'SSL (get error)': async (fetch) => {
     let err;
     try {
       await fetch('https://localhost:28002/', {
-        sslSelfSigned: true,
-        sslPinCert: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
+        sslAllowSelfSigned: true,
+        sslPinnedCertificates: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
       });
     } catch (e) {
       err = e;
