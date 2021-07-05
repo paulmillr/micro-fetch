@@ -13,7 +13,7 @@ const run = async (txt, fn) => {
 }
 run('All', async()=>{
     const fetch = window.exports.default;
-    const tests = window.exports.tests;
+    const tests = {...window.exports.tests, ...window.exports.browser};
     for (let k in tests) await run(k, tests[k].bind(null, fetch));
 });
 </script></body></html>

@@ -1,4 +1,4 @@
-declare type FETCH_OPT = {
+export declare type FETCH_OPT = {
     method?: string;
     type?: 'text' | 'json' | 'bytes';
     redirect: boolean;
@@ -9,7 +9,12 @@ declare type FETCH_OPT = {
     keepAlive: boolean;
     cors: boolean;
     referrer: boolean;
+    sslSelfSigned: boolean;
+    sslPinCert?: string[];
     _redirectCount: number;
 };
+export declare class InvalidCertError extends Error {
+    readonly fingerprint256: string;
+    constructor(msg: string, fingerprint256: string);
+}
 export default function fetchUrl(url: string, options?: FETCH_OPT): Promise<any>;
-export {};

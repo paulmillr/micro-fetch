@@ -20,6 +20,7 @@ const throws = async (fn) => {
   catch (e) { err = e; }
   if (!err) throw new Error('Throws: no error!');
 };
+const sleep = (ms) => new Promise((resolve, _) => setTimeout(resolve, ms));
 
 exports.tests = {
   'Support HTTP': async (fetch) => {
@@ -114,4 +115,99 @@ exports.tests = {
     ),
   'Follow redirect (too much redirects)': (fetch) =>
     throws(() => fetch('https://httpbingo.org/absolute-redirect/40')),
+  'Basic auth': async (fetch) => {
+    const res = await fetch('http://user:pwd@httpbin.org/basic-auth/user/pwd', {
+      type: 'json',
+    });
+    eq(res, {
+      authenticated: true,
+      user: 'user',
+    });
+  },
+  'Fail on wrong auth': (fetch) => throws(() => fetch('http://httpbin.org/basic-auth/login/pwd')),
+  'Fail closed port': (fetch) => throws(() => fetch('http://localhost:28211/')),
 };
+
+exports.node = {
+  'SSL (fails on self-signed)': (fetch) => throws(() => fetch('https://localhost:28001/')),
+  'SSL (allow self-signed)': async (fetch) => {
+    const res = await fetch('https://localhost:28001/', { sslSelfSigned: true });
+    eq(res, { test: 'passed' });
+  },
+  'SSL (allow self-signed, pinning)': async (fetch) => {
+    for (let i = 0; i < 50; i++) {
+      const res = await fetch('https://localhost:28001/', {
+        sslSelfSigned: true,
+        sslPinCert: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
+      });
+      eq(res, { test: 'passed' });
+    }
+  },
+  'SSL (allow self-signed, pinning, fails)': (fetch) =>
+    throws(() =>
+      fetch('https://localhost:28002/', {
+        sslSelfSigned: true,
+        sslPinCert: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
+      })
+    ),
+  'SSL (allow self-signed, pinning2)': async (fetch) => {
+    for (let i = 0; i < 50; i++) {
+      const res = await fetch('https://localhost:28002/', {
+        sslSelfSigned: true,
+        sslPinCert: ['da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'],
+      });
+      eq(res, { test: 'passed' });
+    }
+  },
+  'SSL (allow self-signed, pinning, re-use)': async (fetch) => {
+    for (let i = 0; i < 50; i++) {
+      const res = await fetch('https://localhost:28002/', {
+        sslSelfSigned: true,
+        sslPinCert: [
+          'DA 58 92 ED B1 95 8C 16 52 FA 7F 6D 19 DA 65 03 12 A3 CC E9 06 AC 52 9C F8 83 05 09 F1 C4 B1 95',
+        ],
+      });
+      eq(res, { test: 'passed' });
+    }
+  },
+  'SSL (pinning, httpbin)': async (fetch) => {
+    for (let i = 0; i < 5; i++) {
+      const res = await fetch('https://httpbin.org/robots.txt', {
+        sslPinCert: ['944564e1b2cf887e3cc6ae0b527217d723c8b36c9b0a68a517735b730f8db4f3'],
+      });
+      eq(res, 'User-agent: *\nDisallow: /deny\n');
+    }
+  },
+  'SSL (pinning, httpbin, fails)': (fetch) =>
+    throws(() =>
+      fetch('https://httpbin.org/robots.txt', {
+        sslPinCert: ['da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'],
+      })
+    ),
+  // By some reasons only redirects triggers re-use of tls session
+  'SSL (redirects, pinning, re-use)': async (fetch) => {
+    const res = await fetch('https://httpbingo.org/absolute-redirect/10', {
+      sslPinCert: ['adb918e1a20b97c19fe072da4436ddaa1bbd1d2c8d9bcb85b4dd9cf954d48311'],
+    });
+    eq(res.url, 'https://httpbingo.org/get');
+  },
+  'SSL (redirects, pinning, re-use, fail)': (fetch) =>
+    throws(() =>
+      fetch('https://httpbingo.org/absolute-redirect/10', {
+        sslPinCert: ['da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195'],
+      })
+    ),
+  'SSL (get error)': async (fetch) => {
+    let err;
+    try {
+      await fetch('https://localhost:28002/', {
+        sslSelfSigned: true,
+        sslPinCert: ['35dffeb2c0b774b6135523cf25bc6d5f24462975499beb5f7eae46f9bddc71b8'],
+      });
+    } catch (e) {
+      err = e;
+    }
+    eq(err.fingerprint256, 'da5892edb1958c1652fa7f6d19da650312a3cce906ac529cf8830509f1c4b195');
+  },
+};
+exports.browser = {};
