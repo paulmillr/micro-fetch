@@ -35,6 +35,12 @@ export class InvalidCertError extends Error {
   }
 }
 
+export class InvalidStatusCodeError extends Error {
+  constructor(public readonly statusCode: number) {
+    super(`Request Failed. Status Code: ${statusCode}`);
+  }
+}
+
 function detectType(b: Uint8Array, type?: 'text' | 'json' | 'bytes') {
   if (!type || type === 'text' || type === 'json') {
     try {
@@ -54,8 +60,8 @@ function detectType(b: Uint8Array, type?: 'text' | 'json' | 'bytes') {
 }
 
 let agents: Record<string, Agent> = {};
-function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> {
-  options = { ...DEFAULT_OPT, ...options };
+function fetchNode(url: string, _options?: Partial<FETCH_OPT>): Promise<any> {
+  let options: FETCH_OPT = { ...DEFAULT_OPT, ..._options };
   const http = require('http');
   const https = require('https');
   const zlib = require('zlib');
@@ -98,7 +104,7 @@ function fetchNode(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> 
     }
     if (options.expectStatusCode && status !== options.expectStatusCode) {
       res.resume(); // Consume response data to free up memory
-      throw new Error(`Request Failed. Status Code: ${status}`);
+      throw new InvalidStatusCodeError(status);
     }
     let buf = [];
     for await (const chunk of res) buf.push(chunk);
@@ -179,8 +185,8 @@ const FORBIDDEN_HEADERS = new Set(['Accept-Charset', 'Accept-Encoding', 'Access-
   'Connection', 'Content-Length', 'Cookie', 'Cookie2', 'Date', 'DNT', 'Expect', 'Host', 'Keep-Alive', 'Origin', 'Referer', 'TE', 'Trailer',
   'Transfer-Encoding','Upgrade', 'Via'].map((i) => i.toLowerCase()));
 
-async function fetchBrowser(url: string, options?: FETCH_OPT): Promise<any> {
-  options = { ...DEFAULT_OPT, ...options };
+async function fetchBrowser(url: string, _options?: Partial<FETCH_OPT>): Promise<any> {
+  let options: FETCH_OPT = { ...DEFAULT_OPT, ..._options };
   const headers = new Headers();
   if (options.type === 'json') headers.set('Content-Type', 'application/json');
   let parsed = new URL(url);
@@ -205,7 +211,7 @@ async function fetchBrowser(url: string, options?: FETCH_OPT): Promise<any> {
   }
   const res = await fetch(url, opts);
   if (options.expectStatusCode && res.status !== options.expectStatusCode)
-    throw new Error(`Request failed. Status code: ${res.status}`);
+    throw new InvalidStatusCodeError(res.status);
   const body = detectType(new Uint8Array(await res.arrayBuffer()), options.type);
   if (options.full)
     return { headers: Object.fromEntries(res.headers.entries()), status: res.status, body };
@@ -220,7 +226,7 @@ const IS_NODE = !!(
 );
 
 // We cannot name this fetch, since browser uses one.
-export default function fetchUrl(url: string, options: FETCH_OPT = DEFAULT_OPT): Promise<any> {
+export default function fetchUrl(url: string, options?: Partial<FETCH_OPT>): Promise<any> {
   const fn = IS_NODE ? fetchNode : fetchBrowser;
   return fn(url, options);
 }
