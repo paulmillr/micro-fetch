@@ -126,6 +126,36 @@ exports.tests = {
   },
   'Fail on wrong auth': (fetch) => throws(() => fetch('http://httpbin.org/basic-auth/login/pwd')),
   'Fail closed port': (fetch) => throws(() => fetch('http://localhost:28211/')),
+  'Status code (200)': async (fetch) => {
+    let err;
+    try {
+      await fetch('http://httpbin.org/robots.txt', {
+        type: 'text',
+        expectStatusCode: 404,
+      });
+    } catch (e) {
+      err = e;
+    }
+    eq(err && err.statusCode, 200);
+  },
+  'Status code (401)': async (fetch) => {
+    let err;
+    try {
+      await fetch('http://httpbin.org/basic-auth/user/pwd', { type: 'text' });
+    } catch (e) {
+      err = e;
+    }
+    eq(err && err.statusCode, 401);
+  },
+  'Status code (404)': async (fetch) => {
+    let err;
+    try {
+      await fetch('http://httpbin.org/not-found', { type: 'text' });
+    } catch (e) {
+      err = e;
+    }
+    eq(err && err.statusCode, 404);
+  },
 };
 
 exports.node = {

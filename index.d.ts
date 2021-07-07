@@ -17,4 +17,8 @@ export declare class InvalidCertError extends Error {
     readonly fingerprint256: string;
     constructor(msg: string, fingerprint256: string);
 }
-export default function fetchUrl(url: string, options?: FETCH_OPT): Promise<any>;
+export declare class InvalidStatusCodeError extends Error {
+    readonly statusCode: number;
+    constructor(statusCode: number);
+}
+export default function fetchUrl(url: string, options?: Partial<FETCH_OPT>): Promise<any>;

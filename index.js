@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InvalidCertError = void 0;
+exports.InvalidStatusCodeError = exports.InvalidCertError = void 0;
 const DEFAULT_OPT = Object.freeze({
     redirect: true,
     expectStatusCode: 200,
@@ -19,6 +19,13 @@ class InvalidCertError extends Error {
     }
 }
 exports.InvalidCertError = InvalidCertError;
+class InvalidStatusCodeError extends Error {
+    constructor(statusCode) {
+        super(`Request Failed. Status Code: ${statusCode}`);
+        this.statusCode = statusCode;
+    }
+}
+exports.InvalidStatusCodeError = InvalidStatusCodeError;
 function detectType(b, type) {
     if (!type || type === 'text' || type === 'json') {
         try {
@@ -42,8 +49,8 @@ function detectType(b, type) {
     return b;
 }
 let agents = {};
-function fetchNode(url, options = DEFAULT_OPT) {
-    options = { ...DEFAULT_OPT, ...options };
+function fetchNode(url, _options) {
+    let options = { ...DEFAULT_OPT, ..._options };
     const http = require('http');
     const https = require('https');
     const zlib = require('zlib');
@@ -89,7 +96,7 @@ function fetchNode(url, options = DEFAULT_OPT) {
         }
         if (options.expectStatusCode && status !== options.expectStatusCode) {
             res.resume();
-            throw new Error(`Request Failed. Status Code: ${status}`);
+            throw new InvalidStatusCodeError(status);
         }
         let buf = [];
         for await (const chunk of res)
@@ -163,8 +170,8 @@ const SAFE_HEADERS = new Set(['Accept', 'Accept-Language', 'Content-Language', '
 const FORBIDDEN_HEADERS = new Set(['Accept-Charset', 'Accept-Encoding', 'Access-Control-Request-Headers', 'Access-Control-Request-Method',
     'Connection', 'Content-Length', 'Cookie', 'Cookie2', 'Date', 'DNT', 'Expect', 'Host', 'Keep-Alive', 'Origin', 'Referer', 'TE', 'Trailer',
     'Transfer-Encoding', 'Upgrade', 'Via'].map((i) => i.toLowerCase()));
-async function fetchBrowser(url, options) {
-    options = { ...DEFAULT_OPT, ...options };
+async function fetchBrowser(url, _options) {
+    let options = { ...DEFAULT_OPT, ..._options };
     const headers = new Headers();
     if (options.type === 'json')
         headers.set('Content-Type', 'application/json');
@@ -193,7 +200,7 @@ async function fetchBrowser(url, options) {
     }
     const res = await fetch(url, opts);
     if (options.expectStatusCode && res.status !== options.expectStatusCode)
-        throw new Error(`Request failed. Status code: ${res.status}`);
+        throw new InvalidStatusCodeError(res.status);
     const body = detectType(new Uint8Array(await res.arrayBuffer()), options.type);
     if (options.full)
         return { headers: Object.fromEntries(res.headers.entries()), status: res.status, body };
@@ -203,7 +210,7 @@ const IS_NODE = !!(typeof process == 'object' &&
     process.versions &&
     process.versions.node &&
     process.versions.v8);
-function fetchUrl(url, options = DEFAULT_OPT) {
+function fetchUrl(url, options) {
     const fn = IS_NODE ? fetchNode : fetchBrowser;
     return fn(url, options);
 }
