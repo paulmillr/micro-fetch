@@ -1,6 +1,6 @@
 # micro-ftch
 
-Wraps nodejs built-in modules and browser fetch into one function
+Tiny optimized `fetch()`-like node.js and browser method with binary/JSON, CORS, redirects & SSL pinning.
 
 ## Usage
 
